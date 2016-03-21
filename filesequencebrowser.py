@@ -179,6 +179,11 @@ class FileSequenceWidget(QtGui.QWidget):
        Change directory callback..
     """
     def setCurrentDirPath(self , path ):
+        if os.path.isdir( path ) == False:
+            self.pathEdit.setStyleSheet("background-color:  rgb(255, 128, 128);")
+            return
+
+        self.pathEdit.setStyleSheet("background-color:  rgb(255, 255, 255);")
         self.directorylist.clear()
         self.listfile.clear()
         directory = QtCore.QDir(path)
