@@ -8,29 +8,87 @@ from PySide import QtCore, QtGui
 import os 
 import pyseq as seq  
 
+"""
+ Dialog to manage th bookmark setting.
+"""
+class dialogBookmark(QtGui.QDialog):
+    
+    def __init__(self):
+        super(dialogBookmark, self).__init__()
+        self.initUI()
+        
+    def initUI(self):      
+
+        layout = QtGui.QVBoxLayout()
+
+        self.btn = QtGui.QPushButton('Delete', self)
+ 
+        self.le = QtGui.QListWidget(self)
+       
+        layout.addWidget(self.le)
+        layout.addWidget(self.btn)
+         
+        self._buttonBox = QtGui.QDialogButtonBox(QtGui.QDialogButtonBox.Ok)
+
+        self._buttonBox.accepted.connect(self.accept)
+        self._buttonBox.rejected.connect(self.reject)
+        
+        layout.addWidget(self._buttonBox)
+
+        # Set dialog layout
+        self.setLayout(layout)
+
+        self.setWindowTitle('Manage your bookmarks')
+        self.exec_()
+        
+
+"""
+  LineEdit to prevent the key return close the dialog , used to enter the path ...
+"""
+class LineEditWidget(QtGui.QLineEdit):
+
+    def keyPressEvent(self, e):
+        if ( e.key() == QtCore.Qt.Key_Return or 
+           e.key() == QtCore.Qt.Key_Enter ) :
+            return
+
+        return QtGui.QLineEdit.keyPressEvent(self, e)
+
 
 """"
   ListWidget to catch event Enter or arrow right , or backspace and arrow left.
 """
 class ListWidget(QtGui.QListWidget):
 
-	itemSelected = QtCore.Signal()
-	gotoparent = QtCore.Signal()
+    itemSelected = QtCore.Signal()
+    gotoparent = QtCore.Signal()
+    _actioncontentmenu = []
 	
-	def keyPressEvent(self, e):
-		if ( e.key() == QtCore.Qt.Key_Return or 
+    def keyPressEvent(self, e):
+        if ( e.key() == QtCore.Qt.Key_Return or 
            e.key() == QtCore.Qt.Key_Enter  or		
            e.key() == QtCore.Qt.Key_Right) : 
-			self.itemSelected.emit()
-			return
+            self.itemSelected.emit()
+            return
 				
-		if ( e.key() == QtCore.Qt.Key_Backspace or 
-		     e.key() == QtCore.Qt.Key_Left) :
-			self.gotoparent.emit()
-			return 
+        if ( e.key() == QtCore.Qt.Key_Backspace or 
+            e.key() == QtCore.Qt.Key_Left) :
+                self.gotoparent.emit()
+                return 
 			
-		return QtGui.QListWidget.keyPressEvent(self, e)
+        return QtGui.QListWidget.keyPressEvent(self, e)
 
+    """
+      #param contextMenu : array of Action.
+    """
+    def setContextMenuAction( self , contextMenu):
+        self._actioncontentmenu = contextMenu
+
+    def contextMenuEvent(self, event):
+        menu = QtGui.QMenu(self)
+        for m in  self._actioncontentmenu:
+            menu.addAction(m)
+        menu.exec_(event.globalPos())
 """
   generic widget FileSequenceWidget
   display two list :
@@ -48,10 +106,16 @@ class FileSequenceWidget(QtGui.QWidget):
     SEQUENCE =2 
 
     fileSelected = QtCore.Signal(str)
+    pathChanged = QtCore.Signal(str)
 
     def getFilenameSelected( self ):
         itemSelected = self.listfile.currentIndex().data()
         return os.path.join( self.path , itemSelected )
+
+    def getDirectorySelected( self ):
+        dirSelected = self.directorylist.currentIndex().data()
+        return os.path.join( self.path , dirSelected )
+
 
     def selectdirectory(self):
         rows =  self.directorylist.selectionModel().selectedRows()
@@ -127,9 +191,22 @@ class FileSequenceWidget(QtGui.QWidget):
         self.path = path
         self.initInternalVar()
         label = QtGui.QLabel("Directory")
-        pathEdit = QtGui.QLineEdit()
+        pathEdit = LineEditWidget() # QtGui.QLineEdit()
         label.setBuddy(pathEdit)
 		
+        addBookmark = QtGui.QPushButton("+")
+        addBookmark.setMaximumWidth(15)
+        addBookmark.setToolTip("Add Path as Bookmark")
+
+        self.bookmarkCombo = QtGui.QComboBox()
+
+        layoutBookmark = QtGui.QHBoxLayout()
+        layoutBookmark.addWidget(addBookmark)
+        layoutBookmark.addWidget(self.bookmarkCombo)
+
+        frameBookmark = QtGui.QFrame()
+        frameBookmark.setLayout(layoutBookmark)
+
         self.listfile = ListWidget()
         self.directorylist = ListWidget()
 
@@ -151,8 +228,9 @@ class FileSequenceWidget(QtGui.QWidget):
         labelfilter.setBuddy(self.filtercombo)
 		
         layout = QtGui.QGridLayout()
-        layout.addWidget(label, 0, 1)
-        layout.addWidget(pathEdit, 0, 2)
+        layout.addWidget(label, 0, 0)
+        layout.addWidget(pathEdit, 0, 1)
+        layout.addWidget(frameBookmark, 0, 2 )
         layout.addWidget(splitter,1,0,1,3)
         layout.addWidget(self.checkboxsplitseq, 3, 0)
         layout.addWidget(labelfilter,3,1)
@@ -168,7 +246,7 @@ class FileSequenceWidget(QtGui.QWidget):
         self.directorylist.doubleClicked.connect(self.selectdirectory)
         self.directorylist.itemSelected.connect(self.selectdirectory)
         self.directorylist.gotoparent.connect(self.goToParent)
-
+        addBookmark.clicked.connect(self.showDialogBookmark)
         self.checkboxsplitseq.clicked.connect(self.splitseqchanged)
         self.filtercombo.currentIndexChanged.connect(self.filterchanged)
         self.setLayout(layout)
@@ -186,6 +264,9 @@ class FileSequenceWidget(QtGui.QWidget):
         self.pathEdit.setStyleSheet("background-color:  rgb(255, 255, 255);")
         self.directorylist.clear()
         self.listfile.clear()
+
+        self.pathChanged.emit( path )
+
         directory = QtCore.QDir(path)
         files = list(directory.entryList(QtCore.QDir.AllDirs))
         for fn in files:
@@ -225,7 +306,20 @@ class FileSequenceWidget(QtGui.QWidget):
     """
     def addFilter(self, filter):
 	    self.filtercombo.addItem(filter)
+
+    def showDialogBookmark(self):
+        db = dialogBookmark()
+
+    """
+        Set Action for the context Menu of DirectoryList
+        @param action list of action.
+    """
+    def setContextMenuActionDirectoryList( self , action):
+        self.directorylist.setContextMenuAction( action )
 	
+    @property
+    def selectedpath( self):
+        return self.getDirectorySelected()
 """
 Modal Dialog to select seauence file..
 By default the path in the home users
@@ -269,10 +363,73 @@ class FileSequenceDialog(QtGui.QDialog):
 		return self.widget.getFilenameSelected()
         
 class MainWindow(QtGui.QMainWindow):
-   
-    def __init__(self):
-    	super(MainWindow, self).__init__()
+    def tableviewmode(self ):
+        self.widget.setTableViewMode()
+
+    def initToolbar( self ):
+    
+        """
+        self.tableview = QtGui.QAction("&Table View...", self,
+            shortcut=QtGui.QKeySequence.Open,
+            statusTip="Open an existing file", triggered=self.widget.setTableViewMode)
         
+        self.listview = QtGui.QAction("&List View...", self,
+            shortcut=QtGui.QKeySequence.Open,
+            statusTip="Open an existing file", triggered=self.widget.setListViewMode)
+        """
+        
+        self.fileMenu = self.menuBar().addMenu("&File")
+        self.viewMenu = self.menuBar().addMenu("&View")
+        
+        #self.viewMenu.addAction(self.tableview)
+        #self.viewMenu.addAction(self.listview)
+
+        addTabAction = QtGui.QAction("Add Tab ", self)
+        addTabAction.triggered.connect(self.addTab)
+
+        self.viewMenu.addAction(addTabAction)
+
+        exitAction = QtGui.QAction('Exit', self)
+        exitAction.setShortcut('Ctrl+Q')
+        exitAction.triggered.connect(self.close)
+        
+        self.toolbar = self.addToolBar('Exit')
+        self.toolbar.addAction(exitAction)
+
+    """
+      slot changing the title of tab for the current tab when user change a path...
+    """
+    def changecurrenttitletab( self, path ):
+        self.tab.setTabText( self.tab.currentIndex(), path )
+
+    def addTab(self , path = QtCore.QDir.homePath()):
+        fsw = FileSequenceWidget(path)
+        fsw.pathChanged.connect( self.changecurrenttitletab )        
+        self.tab.addTab(fsw,path)
+
+        openPathTabAction = QtGui.QAction("Open Path Tab ", self)
+        openPathTabAction.triggered.connect(self.openPathTab)
+        fsw.setContextMenuActionDirectoryList([openPathTabAction])
+
+    def closetab(self,index ):
+        self.tab.removeTab( index )
+
+    def openPathTab(self ):
+        self.addTab( self.tab.currentWidget() .selectedpath )      
+
+    def __init__(self):
+        super(MainWindow, self).__init__()
+
+        # create QTabWidget
+        self.tab = QtGui.QTabWidget()
+        self.tab.setTabsClosable(True)
+        self.tab.tabCloseRequested.connect(self.closetab) 
+        self.addTab(QtCore.QDir.homePath())
+        self.setCentralWidget(self.tab)
+        self.initToolbar()
+
+       
+
 
 if __name__ == '__main__':
 
@@ -282,8 +439,9 @@ if __name__ == '__main__':
     window = MainWindow()
     window.show()
 	
-    fsd = FileSequenceDialog(["",".jpg;.png;.bmp;.gif;.pic;.exr",".jpg",".png",".mov;.avi;.mp4;.mpg"])
-    if fsd.exec_() == QtGui.QDialog.Accepted:
-        print fsd.getFilename()
-	
+
+    #fsd = FileSequenceDialog(["",".jpg;.png;.bmp;.gif;.pic;.exr",".jpg",".png",".mov;.avi;.mp4;.mpg"])
+    #if fsd.exec_() == QtGui.QDialog.Accepted:
+    #    print fsd.getFilename()
+	    
     sys.exit(app.exec_())
