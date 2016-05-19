@@ -261,6 +261,7 @@ class FileSequenceWidget(QtGui.QWidget):
             self.pathEdit.setStyleSheet("background-color:  rgb(255, 128, 128);")
             return
 
+        self.path = path
         self.pathEdit.setStyleSheet("background-color:  rgb(255, 255, 255);")
         self.directorylist.clear()
         self.listfile.clear()
