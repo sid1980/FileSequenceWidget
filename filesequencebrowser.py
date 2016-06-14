@@ -6,6 +6,7 @@
 # 
 from PySide import QtCore, QtGui
 import os 
+import re
 import pyseq as seq  
 
 """
@@ -288,6 +289,12 @@ class FileSequenceWidget(QtGui.QWidget):
 				self.addItem(fn ,FileSequenceWidget.FILE)
 	
     """
+    refresh the filelist
+    """
+    def refresh( self ):
+        self.setCurrentDirPath( self.path)
+
+    """
     slot if the checkbox split seq change.
     """
     def splitseqchanged( self ):
@@ -318,9 +325,21 @@ class FileSequenceWidget(QtGui.QWidget):
     def setContextMenuActionDirectoryList( self , action):
         self.directorylist.setContextMenuAction( action )
 	
+    """
+        Set Action for the context Menu of DirectoryList
+        @param action list of action.
+    """
+    def setContextMenuActionFileList( self , action):
+        self.listfile.setContextMenuAction( action )
+
     @property
     def selectedpath( self):
         return self.getDirectorySelected()
+
+    @property
+    def selectedfiles( self):
+        return self.getFilenameSelected()
+
 """
 Modal Dialog to select seauence file..
 By default the path in the home users
@@ -362,7 +381,10 @@ class FileSequenceDialog(QtGui.QDialog):
 	
     def getFilename(self):
 		return self.widget.getFilenameSelected()
-        
+
+"""
+Main window for a application browsing the file system.
+"""     
 class MainWindow(QtGui.QMainWindow):
     def tableviewmode(self ):
         self.widget.setTableViewMode()
@@ -412,11 +434,41 @@ class MainWindow(QtGui.QMainWindow):
         openPathTabAction.triggered.connect(self.openPathTab)
         fsw.setContextMenuActionDirectoryList([openPathTabAction])
 
+        renameFileTabAction = QtGui.QAction("Rename", self)
+        renameFileTabAction.triggered.connect(self.renameFile)
+        fsw.setContextMenuActionFileList([renameFileTabAction])
+
     def closetab(self,index ):
         self.tab.removeTab( index )
 
     def openPathTab(self ):
-        self.addTab( self.tab.currentWidget() .selectedpath )      
+        self.addTab( self.tab.currentWidget() .selectedpath )
+
+    def renameFile(self):
+        head, tail = os.path.split(self.tab.currentWidget().selectedfiles)
+        dirname = os.path.dirname(self.tab.currentWidget().selectedfiles)
+        print dirname 
+        # Sequence 
+        if len( tail.split("[") ) > 1:
+            headseq , middleseq = tail.split("[")
+            number , endseq =  middleseq.split("]")
+            begin , end = number.split("-")
+            print "Sequence " + headseq
+            print number 
+            print endseq
+            text, ok = QtGui.QInputDialog.getText(self, 'Input Dialog', 'Enter your name:',QtGui.QLineEdit.Normal,headseq)
+            if ok:
+                for index in range( int(begin) , int (end) + 1 ):
+                    #os.rename( ,os.path.join(head, text))
+                    src  =  os.path.join( dirname , "%s%d%s" % ( headseq, index, endseq) ) 
+                    dest =  os.path.join( dirname , "%s%d%s" % ( text, index, endseq) ) 
+                    os.rename( src,dest)
+                    self.tab.currentWidget().refresh() 
+        else:
+            text, ok = QtGui.QInputDialog.getText(self, 'Input Dialog', 'Enter your name:',QtGui.QLineEdit.Normal,tail)
+            if ok:
+                os.rename( self.tab.currentWidget().selectedfiles,os.path.join(dirname, text))
+                self.tab.currentWidget().refresh() 
 
     def __init__(self):
         super(MainWindow, self).__init__()

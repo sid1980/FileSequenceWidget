@@ -6,3 +6,7 @@ A File Manager Widget in PySide managing the sequence file ( FILE0001.jpg FILE 0
 ![Dialog Filter](screenshot3.png "Dialog with filter")
 
 ![Filemanger ](screenshot4.png "standalone filemanager")
+
+Feature:
+
+Add the feature , rename single , or sequence file.
