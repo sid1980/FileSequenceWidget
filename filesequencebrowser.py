@@ -7,7 +7,10 @@
 from PySide import QtCore, QtGui
 import os 
 import re
+import imp
+import sys
 import pyseq as seq  
+
 
 """
  Dialog to manage th bookmark setting.
@@ -87,6 +90,7 @@ class ListWidget(QtGui.QListWidget):
 
     def contextMenuEvent(self, event):
         menu = QtGui.QMenu(self)
+        print self._actioncontentmenu
         for m in  self._actioncontentmenu:
             menu.addAction(m)
         menu.exec_(event.globalPos())
@@ -186,7 +190,7 @@ class FileSequenceWidget(QtGui.QWidget):
         self.icons[FileSequenceWidget.FOLDER] = self.iconFolder
         self.icons[FileSequenceWidget.FILE] = self.iconFile
         self.icons[FileSequenceWidget.SEQUENCE] = self.iconSequence
-        
+
     def __init__(self, path, parent=None):
         super(FileSequenceWidget, self).__init__(parent)
         self.path = path
@@ -386,6 +390,9 @@ class FileSequenceDialog(QtGui.QDialog):
 Main window for a application browsing the file system.
 """     
 class MainWindow(QtGui.QMainWindow):
+
+    pluginFolder = "./plugins"
+
     def tableviewmode(self ):
         self.widget.setTableViewMode()
 
@@ -419,6 +426,31 @@ class MainWindow(QtGui.QMainWindow):
         self.toolbar = self.addToolBar('Exit')
         self.toolbar.addAction(exitAction)
 
+    
+
+    """
+        load and intialise plugins
+    """
+    def initPlugins(self):
+
+        path = "plugins"
+        plugins = []
+        # Load plugins
+        sys.path.insert(0, path)
+        for f in os.listdir(path):
+            fname, ext = os.path.splitext(f)
+            if ext == '.py':
+                print fname
+                mod = __import__(fname)
+                #print dir(mod)
+                #print dir(mod.Plugin())
+                plugins.append( mod.Plugin() )
+        sys.path.pop(0)
+        return plugins    
+       
+        #fsw.setContextMenuActionFileList([renameFileTabAction])
+
+
     """
       slot changing the title of tab for the current tab when user change a path...
     """
@@ -434,9 +466,20 @@ class MainWindow(QtGui.QMainWindow):
         openPathTabAction.triggered.connect(self.openPathTab)
         fsw.setContextMenuActionDirectoryList([openPathTabAction])
 
-        renameFileTabAction = QtGui.QAction("Rename", self)
-        renameFileTabAction.triggered.connect(self.renameFile)
-        fsw.setContextMenuActionFileList([renameFileTabAction])
+#        renameFileTabAction = QtGui.QAction("Rename", self)
+#        renameFileTabAction.triggered.connect(self.renameFile)
+
+
+        menucontext = [] 
+        for p in self.plugins:
+            a = QtGui.QAction(p.getLabel(), self)
+            a.triggered.connect(lambda ans=p: self.execplugin(ans))
+            menucontext.append( a )
+
+        fsw.setContextMenuActionFileList( menucontext )
+
+    def execplugin( self , plugin ):
+        plugin.execute( self.tab.currentWidget().selectedfiles,self.tab.currentWidget() )
 
     def closetab(self,index ):
         self.tab.removeTab( index )
@@ -444,6 +487,7 @@ class MainWindow(QtGui.QMainWindow):
     def openPathTab(self ):
         self.addTab( self.tab.currentWidget() .selectedpath )
 
+    """
     def renameFile(self):
         head, tail = os.path.split(self.tab.currentWidget().selectedfiles)
         dirname = os.path.dirname(self.tab.currentWidget().selectedfiles)
@@ -469,10 +513,12 @@ class MainWindow(QtGui.QMainWindow):
             if ok:
                 os.rename( self.tab.currentWidget().selectedfiles,os.path.join(dirname, text))
                 self.tab.currentWidget().refresh() 
-
+    """
+    
     def __init__(self):
         super(MainWindow, self).__init__()
 
+        self.plugins = self.initPlugins()
         # create QTabWidget
         self.tab = QtGui.QTabWidget()
         self.tab.setTabsClosable(True)
