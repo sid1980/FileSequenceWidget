@@ -5,12 +5,59 @@
 # charles vidal charles.vidal@gmail.com 
 # 
 from PySide import QtCore, QtGui
-import os 
+import os
+import random
 import re
 import imp
 import sys
 import pyseq as seq  
 
+
+"""
+  Bookmark Manager 
+"""
+class BookmarkMamanger():
+
+    _instance = None
+    
+    def __init__(self):
+        self.qsettings = QtCore.QSettings("filesequencebrowser", "bookmarks")
+    
+    def __new__(class_, *args, **kwargs):
+        if not isinstance(BookmarkMamanger._instance, BookmarkMamanger):
+            BookmarkMamanger._instance = BookmarkMamanger.__new__(class_, *args, **kwargs)
+        return BookmarkMamanger._instance
+    
+
+    def getBookmarks(self):
+        result = []
+        for k in self.qsettings.allKeys():
+            result.append(  self.qsettings.value( k ) )
+
+        return result
+
+ 
+
+    def addBookmark( self , filepath):
+        self.qsettings.setValue(str(random.randint(1, 10000)) ,filepath)
+         
+        
+
+    def deleteBookmark( self, filepath):
+        for k in self.qsettings.allKeys():
+            if v == self.qsettings.value( k ):
+                self.qsettings.remove(k)
+                return        
+         
+
+    @staticmethod
+    def getAllBookmarks():
+        b = BookmarkMamanger()
+        return b.getBookmarks()
+
+    @staticmethod
+    def getBookmarkManager():
+        return BookmarkMamanger()
 
 """
  Dialog to manage th bookmark setting.
@@ -25,26 +72,39 @@ class dialogBookmark(QtGui.QDialog):
 
         layout = QtGui.QVBoxLayout()
 
-        self.btn = QtGui.QPushButton('Delete', self)
+        self.deletebtn = QtGui.QPushButton('Delete', self)
  
         self.le = QtGui.QListWidget(self)
-       
+
+        
         layout.addWidget(self.le)
-        layout.addWidget(self.btn)
+        layout.addWidget(self.deletebtn)
          
         self._buttonBox = QtGui.QDialogButtonBox(QtGui.QDialogButtonBox.Ok)
+
+        self.deletebtn.clicked.connect(self.deleteBookmark)
 
         self._buttonBox.accepted.connect(self.accept)
         self._buttonBox.rejected.connect(self.reject)
         
         layout.addWidget(self._buttonBox)
 
+        self.refreshListBookmark()
         # Set dialog layout
         self.setLayout(layout)
 
         self.setWindowTitle('Manage your bookmarks')
         self.exec_()
-        
+
+    def refreshListBookmark(self):
+        self.le.clear()
+        for v in BookmarkMamanger.getAllBookmarks():
+            self.le.addItem(v)
+       
+
+    def deleteBookmark(self):
+        BookmarkMamanger.getBookmarkManager().deleteBookmark( self.le.currentIndex().data() )        
+        self.refreshListBookmark()
 
 """
   LineEdit to prevent the key return close the dialog , used to enter the path ...
@@ -83,17 +143,48 @@ class ListWidget(QtGui.QListWidget):
         return QtGui.QListWidget.keyPressEvent(self, e)
 
     """
-      #param contextMenu : array of Action.
+      #param contextMenu : array of dictionnaire action Action, plugin Plugin 
     """
     def setContextMenuAction( self , contextMenu):
         self._actioncontentmenu = contextMenu
 
+    def isSelectedSequence(self ):
+        if len( self.currentIndex().data().split("[") ) > 1:
+            return True
+        else:
+            return False
+
+    def getExtension( self ):
+        filename, file_extension = os.path.splitext(self.currentIndex().data())
+        return file_extension
+
+
+    #
+    # crete menu form _actioncontentmenu 
+    # 
     def contextMenuEvent(self, event):
         menu = QtGui.QMenu(self)
-        print self._actioncontentmenu
+        #print self._actioncontentmenu
         for m in  self._actioncontentmenu:
-            menu.addAction(m)
+            if type( m ) == QtGui.QAction:
+                menu.addAction(m)
+            else:
+                plugin = m["plugin"]
+                #
+                # test with dict for the plugin objet
+                # if toto in dict(m[[plugin]]):
+                if "acceptOnlySequence" in dir( plugin) and self.isSelectedSequence()  == False:
+                    continue 
+
+                if self.isSelectedSequence()==True and plugin.acceptSequence() == False:
+                    continue
+
+                menu.addAction(m["action"])
+
         menu.exec_(event.globalPos())
+
+
+
 """
   generic widget FileSequenceWidget
   display two list :
@@ -191,9 +282,20 @@ class FileSequenceWidget(QtGui.QWidget):
         self.icons[FileSequenceWidget.FILE] = self.iconFile
         self.icons[FileSequenceWidget.SEQUENCE] = self.iconSequence
 
+    def refreshbookmarkcombo(self):
+        self.bookmarkCombo.clear()
+        self.bookmarkCombo.addItem("")
+        for v in BookmarkMamanger.getAllBookmarks():
+            self.bookmarkCombo.addItem(v)
+
+
     def __init__(self, path, parent=None):
+        """
+        Create gui.
+        """
         super(FileSequenceWidget, self).__init__(parent)
         self.path = path
+        self.listseq = {}
         self.initInternalVar()
         label = QtGui.QLabel("Directory")
         pathEdit = LineEditWidget() # QtGui.QLineEdit()
@@ -203,10 +305,17 @@ class FileSequenceWidget(QtGui.QWidget):
         addBookmark.setMaximumWidth(15)
         addBookmark.setToolTip("Add Path as Bookmark")
 
-        self.bookmarkCombo = QtGui.QComboBox()
+        showBookmark = QtGui.QPushButton("b")
+        showBookmark.setMaximumWidth(15)
+        showBookmark.setToolTip("Show Bookmarks")
 
+        self.bookmarkCombo = QtGui.QComboBox()
+        self.refreshbookmarkcombo()
+
+        
         layoutBookmark = QtGui.QHBoxLayout()
         layoutBookmark.addWidget(addBookmark)
+        layoutBookmark.addWidget(showBookmark)
         layoutBookmark.addWidget(self.bookmarkCombo)
 
         frameBookmark = QtGui.QFrame()
@@ -251,9 +360,11 @@ class FileSequenceWidget(QtGui.QWidget):
         self.directorylist.doubleClicked.connect(self.selectdirectory)
         self.directorylist.itemSelected.connect(self.selectdirectory)
         self.directorylist.gotoparent.connect(self.goToParent)
-        addBookmark.clicked.connect(self.showDialogBookmark)
+        addBookmark.clicked.connect(self.addBookmark)
+        showBookmark.clicked.connect(self.showDialogBookmark)
         self.checkboxsplitseq.clicked.connect(self.splitseqchanged)
         self.filtercombo.currentIndexChanged.connect(self.filterchanged)
+        self.bookmarkCombo.currentIndexChanged.connect(self.bookmarkchanged)
         self.setLayout(layout)
         self.setWindowTitle("File Sequence browser")
         pathEdit.setText(self.path)
@@ -270,6 +381,7 @@ class FileSequenceWidget(QtGui.QWidget):
         self.pathEdit.setStyleSheet("background-color:  rgb(255, 255, 255);")
         self.directorylist.clear()
         self.listfile.clear()
+        self.listseq.clear()
 
         self.pathChanged.emit( path )
 
@@ -281,11 +393,14 @@ class FileSequenceWidget(QtGui.QWidget):
             self.addItem(fn ,FileSequenceWidget.FOLDER)
 
         if self._splitSequence == False: 
-		    sequences, others = seq.FileSequence.find(path)
-		    for s in sequences:
-				self.addItem(str(s), FileSequenceWidget.SEQUENCE)
-				
-		    for o in others:
+            sequences, others = seq.FileSequence.find(path)
+            for s in sequences:
+                self.addItem(str(s), FileSequenceWidget.SEQUENCE)
+                self.listseq[str(s)] = s
+                #print s.padding
+                #print s.head
+
+            for o in others:
 				self.addItem(o , FileSequenceWidget.FILE)
         else:
             files = [e for e in os.listdir(path) if os.path.isfile(os.path.join(path, e))]
@@ -312,6 +427,14 @@ class FileSequenceWidget(QtGui.QWidget):
 	    self.setCurrentDirPath( self.path)
 	
     """
+    slot if the commbox bookmark selection change
+    """
+    def bookmarkchanged(self):
+        newpath = self.bookmarkCombo.currentText()
+        if newpath != "":
+            self.pathEdit.setText( newpath ) 
+
+    """
       add a filter type:
         example : 
         self.addFilter(".jpg;.png;.bmp;.gif;.pic;.exr")
@@ -319,6 +442,12 @@ class FileSequenceWidget(QtGui.QWidget):
     def addFilter(self, filter):
 	    self.filtercombo.addItem(filter)
 
+    # Slot adding bookmark 
+    def addBookmark(self):
+        BookmarkMamanger.getBookmarkManager().addBookmark(self.path)
+        self.refreshbookmarkcombo()
+
+    # Slot show bookmrk dialog
     def showDialogBookmark(self):
         db = dialogBookmark()
 
@@ -336,6 +465,12 @@ class FileSequenceWidget(QtGui.QWidget):
     def setContextMenuActionFileList( self , action):
         self.listfile.setContextMenuAction( action )
 
+    def getSequenseObj( self , filename):
+        return self.listseq[filename]
+
+    def isSequence(self, filename):
+        return filename in self.listseq 
+    
     @property
     def selectedpath( self):
         return self.getDirectorySelected()
@@ -440,7 +575,7 @@ class MainWindow(QtGui.QMainWindow):
         for f in os.listdir(path):
             fname, ext = os.path.splitext(f)
             if ext == '.py':
-                print fname
+                #print fname
                 mod = __import__(fname)
                 #print dir(mod)
                 #print dir(mod.Plugin())
@@ -474,9 +609,14 @@ class MainWindow(QtGui.QMainWindow):
         for p in self.plugins:
             a = QtGui.QAction(p.getLabel(), self)
             a.triggered.connect(lambda ans=p: self.execplugin(ans))
-            menucontext.append( a )
+            dico = {}
+            dico['action'] = a;
+            dico['plugin'] = p;
+            
+            menucontext.append(dico)
 
         fsw.setContextMenuActionFileList( menucontext )
+        #fsw.setContextMenuActionFileList( self.plugins )
 
     def execplugin( self , plugin ):
         plugin.execute( self.tab.currentWidget().selectedfiles,self.tab.currentWidget() )
@@ -487,34 +627,7 @@ class MainWindow(QtGui.QMainWindow):
     def openPathTab(self ):
         self.addTab( self.tab.currentWidget() .selectedpath )
 
-    """
-    def renameFile(self):
-        head, tail = os.path.split(self.tab.currentWidget().selectedfiles)
-        dirname = os.path.dirname(self.tab.currentWidget().selectedfiles)
-        print dirname 
-        # Sequence 
-        if len( tail.split("[") ) > 1:
-            headseq , middleseq = tail.split("[")
-            number , endseq =  middleseq.split("]")
-            begin , end = number.split("-")
-            print "Sequence " + headseq
-            print number 
-            print endseq
-            text, ok = QtGui.QInputDialog.getText(self, 'Input Dialog', 'Enter your name:',QtGui.QLineEdit.Normal,headseq)
-            if ok:
-                for index in range( int(begin) , int (end) + 1 ):
-                    #os.rename( ,os.path.join(head, text))
-                    src  =  os.path.join( dirname , "%s%d%s" % ( headseq, index, endseq) ) 
-                    dest =  os.path.join( dirname , "%s%d%s" % ( text, index, endseq) ) 
-                    os.rename( src,dest)
-                    self.tab.currentWidget().refresh() 
-        else:
-            text, ok = QtGui.QInputDialog.getText(self, 'Input Dialog', 'Enter your name:',QtGui.QLineEdit.Normal,tail)
-            if ok:
-                os.rename( self.tab.currentWidget().selectedfiles,os.path.join(dirname, text))
-                self.tab.currentWidget().refresh() 
-    """
-    
+
     def __init__(self):
         super(MainWindow, self).__init__()
 
