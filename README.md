@@ -10,3 +10,5 @@ A File Manager Widget in PySide managing the sequence file ( FILE0001.jpg FILE 0
 Feature:
 
 Add the feature , rename single , or sequence file.
+
+![rename ](screenshot5.png "rename dialog sequence file")
