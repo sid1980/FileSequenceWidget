@@ -526,8 +526,6 @@ Main window for a application browsing the file system.
 """     
 class MainWindow(QtGui.QMainWindow):
 
-    pluginFolder = "./plugins"
-
     def tableviewmode(self ):
         self.widget.setTableViewMode()
 
@@ -569,10 +567,11 @@ class MainWindow(QtGui.QMainWindow):
     def initPlugins(self):
 
         path = "plugins"
+        pluginpath = os.path.join( os.path.dirname( os.path.realpath(__file__) ) , path )
         plugins = []
         # Load plugins
-        sys.path.insert(0, path)
-        for f in os.listdir(path):
+        sys.path.insert(0, pluginpath)
+        for f in os.listdir(pluginpath):
             fname, ext = os.path.splitext(f)
             if ext == '.py':
                 #print fname
