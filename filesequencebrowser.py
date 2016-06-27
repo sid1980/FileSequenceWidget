@@ -45,7 +45,7 @@ class BookmarkMamanger():
 
     def deleteBookmark( self, filepath):
         for k in self.qsettings.allKeys():
-            if v == self.qsettings.value( k ):
+            if filepath == self.qsettings.value( k ):
                 self.qsettings.remove(k)
                 return        
          
